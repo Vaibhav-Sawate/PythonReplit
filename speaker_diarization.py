@@ -9,10 +9,10 @@ warnings.filterwarnings('ignore')
 
 class SpeakerDiarization:
     def __init__(self):
-        self.window_length = 2.0  # seconds per window
-        self.hop_length = 1.0     # seconds between windows
-        self.min_speaker_duration = 3.0  # minimum seconds per speaker
-        self.max_speakers = 6     # maximum number of speakers to detect
+        self.window_length = 1.5  # seconds per window (shorter for better resolution)
+        self.hop_length = 0.5     # seconds between windows (more overlap)
+        self.min_speaker_duration = 2.0  # minimum seconds per speaker (reduced)
+        self.max_speakers = 8     # maximum number of speakers to detect
         
     def extract_speaker_features(self, y, sr, window_samples, hop_samples):
         """Extract features for speaker identification"""
@@ -23,8 +23,8 @@ class SpeakerDiarization:
             window = y[i:i + window_samples]
             timestamp = i / sr
             
-            # Skip if window is too quiet (likely silence)
-            if np.mean(np.abs(window)) < np.mean(np.abs(y)) * 0.1:
+            # Skip if window is too quiet (likely silence) - made less restrictive
+            if np.mean(np.abs(window)) < np.mean(np.abs(y)) * 0.05:
                 continue
                 
             # Extract MFCC features for speaker identification
@@ -164,7 +164,7 @@ class SpeakerDiarization:
         return filters
     
     def cluster_speakers(self, features):
-        """Cluster features to identify different speakers"""
+        """Cluster features to identify different speakers with improved sensitivity"""
         if len(features) < 2:
             return np.array([0] * len(features))
         
@@ -172,73 +172,170 @@ class SpeakerDiarization:
         scaler = StandardScaler()
         features_normalized = scaler.fit_transform(features)
         
-        # Find optimal number of clusters
+        # Find optimal number of clusters with multiple methods
         best_n_clusters = 1
         best_score = -1
+        cluster_scores = {}
         
-        for n_clusters in range(2, min(self.max_speakers + 1, len(features))):
+        # Try different clustering approaches
+        for n_clusters in range(2, min(self.max_speakers + 1, len(features)//2 + 1)):
             if n_clusters >= len(features):
                 break
-                
-            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
-            cluster_labels = kmeans.fit_predict(features_normalized)
             
-            # Check if we have reasonable cluster sizes
-            unique_labels, counts = np.unique(cluster_labels, return_counts=True)
-            if np.min(counts) >= 3:  # Each cluster should have at least 3 points
+            # Try multiple initializations to find best clustering
+            best_kmeans_score = -1
+            best_kmeans_labels = None
+            
+            for init_attempt in range(5):  # Multiple random starts
                 try:
-                    score = silhouette_score(features_normalized, cluster_labels)
-                    if score > best_score:
-                        best_score = score
-                        best_n_clusters = n_clusters
+                    kmeans = KMeans(n_clusters=n_clusters, random_state=42+init_attempt, n_init=20)
+                    cluster_labels = kmeans.fit_predict(features_normalized)
+                    
+                    # Check if we have reasonable cluster sizes (reduced minimum)
+                    unique_labels, counts = np.unique(cluster_labels, return_counts=True)
+                    if np.min(counts) >= 2:  # Reduced minimum cluster size
+                        try:
+                            sil_score = silhouette_score(features_normalized, cluster_labels)
+                            
+                            # Also calculate inertia-based score (within-cluster sum of squares)
+                            inertia_score = 1.0 / (1.0 + kmeans.inertia_)
+                            
+                            # Combined score (weighted average)
+                            combined_score = 0.7 * sil_score + 0.3 * inertia_score
+                            
+                            if combined_score > best_kmeans_score:
+                                best_kmeans_score = combined_score
+                                best_kmeans_labels = cluster_labels
+                        except:
+                            continue
                 except:
                     continue
+            
+            if best_kmeans_labels is not None:
+                cluster_scores[n_clusters] = (best_kmeans_score, best_kmeans_labels)
         
-        # Final clustering with best parameters
-        if best_n_clusters > 1:
-            kmeans = KMeans(n_clusters=best_n_clusters, random_state=42, n_init=10)
-            cluster_labels = kmeans.fit_predict(features_normalized)
+        # Select best clustering - prefer higher cluster counts if scores are close
+        if cluster_scores:
+            # Sort by score, but prefer more clusters if scores are within 0.1
+            sorted_scores = sorted(cluster_scores.items(), key=lambda x: x[1][0], reverse=True)
+            
+            if len(sorted_scores) > 1:
+                # If best score is close to second best, prefer more clusters
+                best_score, best_labels = sorted_scores[0][1]
+                for n_clusters, (score, labels) in sorted_scores[1:]:
+                    if best_score - score < 0.1 and n_clusters > best_n_clusters:
+                        best_n_clusters = n_clusters
+                        cluster_labels = labels
+                        break
+                else:
+                    best_n_clusters = sorted_scores[0][0]
+                    cluster_labels = sorted_scores[0][1][1]
+            else:
+                best_n_clusters = sorted_scores[0][0]
+                cluster_labels = sorted_scores[0][1][1]
+            
+            # Additional validation: check if speakers are actually different
+            cluster_labels = self._validate_speaker_differences(features_normalized, cluster_labels)
+            
         else:
             cluster_labels = np.zeros(len(features), dtype=int)
         
         return cluster_labels
     
+    def _validate_speaker_differences(self, features, cluster_labels):
+        """Validate that detected speakers are actually different"""
+        unique_clusters = np.unique(cluster_labels)
+        
+        if len(unique_clusters) <= 1:
+            return cluster_labels
+        
+        # Calculate centroid distances
+        centroids = []
+        for cluster_id in unique_clusters:
+            cluster_features = features[cluster_labels == cluster_id]
+            centroid = np.mean(cluster_features, axis=0)
+            centroids.append(centroid)
+        
+        # Check if centroids are sufficiently different
+        min_distance = float('inf')
+        for i in range(len(centroids)):
+            for j in range(i + 1, len(centroids)):
+                distance = np.linalg.norm(centroids[i] - centroids[j])
+                min_distance = min(min_distance, distance)
+        
+        # If centroids are too similar, merge into single speaker
+        distance_threshold = 1.5  # Adjusted threshold
+        if min_distance < distance_threshold and len(unique_clusters) == 2:
+            # For 2 speakers, be more strict about differences
+            return np.zeros(len(cluster_labels), dtype=int)
+        
+        return cluster_labels
+    
     def segment_by_speaker(self, y, sr, cluster_labels, timestamps):
-        """Segment audio by identified speakers"""
+        """Segment audio by identified speakers with improved segmentation"""
         window_samples = int(self.window_length * sr)
         hop_samples = int(self.hop_length * sr)
         
-        # Create speaker segments
+        # Apply smoothing to cluster labels to reduce noise
+        cluster_labels = self._smooth_speaker_labels(cluster_labels)
+        
+        # Create speaker segments with better continuity
         speakers = {}
-        current_speaker = cluster_labels[0] if len(cluster_labels) > 0 else 0
-        segment_start = 0
         
+        if len(cluster_labels) == 0:
+            return {0: y}
+        
+        # Track speaker changes more precisely
         for i, (timestamp, speaker) in enumerate(zip(timestamps, cluster_labels)):
-            if speaker != current_speaker or i == len(timestamps) - 1:
-                # End current segment
-                segment_end = int(timestamp * sr) if i < len(timestamps) - 1 else len(y)
-                
-                if current_speaker not in speakers:
-                    speakers[current_speaker] = []
-                
-                # Add segment if it's long enough
-                segment_duration = (segment_end - segment_start) / sr
-                if segment_duration >= self.min_speaker_duration:
-                    speakers[current_speaker].append(y[segment_start:segment_end])
-                
-                # Start new segment
-                current_speaker = speaker
-                segment_start = int(timestamp * sr)
+            if speaker not in speakers:
+                speakers[speaker] = []
+            
+            # Calculate sample position
+            sample_start = int(timestamp * sr)
+            sample_end = int((timestamp + self.window_length) * sr)
+            sample_end = min(sample_end, len(y))
+            
+            if sample_end > sample_start:
+                speakers[speaker].append(y[sample_start:sample_end])
         
-        # Concatenate segments for each speaker
+        # Concatenate segments for each speaker and apply minimum duration
         speaker_audio = {}
         for speaker_id, segments in speakers.items():
-            if segments:  # Only include speakers with valid segments
+            if segments:
                 concatenated = np.concatenate(segments)
-                if len(concatenated) / sr >= self.min_speaker_duration:  # Final duration check
+                duration = len(concatenated) / sr
+                
+                # Relaxed minimum duration check
+                if duration >= self.min_speaker_duration:
                     speaker_audio[speaker_id] = concatenated
+                elif len(speakers) <= 2:  # For 2 speakers, be more lenient
+                    if duration >= 1.5:  # Minimum 1.5 seconds
+                        speaker_audio[speaker_id] = concatenated
+        
+        # If no speakers meet criteria, return all audio as single speaker
+        if not speaker_audio:
+            speaker_audio[0] = y
         
         return speaker_audio
+    
+    def _smooth_speaker_labels(self, cluster_labels, window_size=3):
+        """Apply smoothing to reduce noise in speaker assignments"""
+        if len(cluster_labels) < window_size:
+            return cluster_labels
+        
+        smoothed = cluster_labels.copy()
+        
+        for i in range(len(cluster_labels)):
+            start = max(0, i - window_size // 2)
+            end = min(len(cluster_labels), i + window_size // 2 + 1)
+            
+            window = cluster_labels[start:end]
+            # Use most frequent speaker in window
+            unique, counts = np.unique(window, return_counts=True)
+            most_frequent = unique[np.argmax(counts)]
+            smoothed[i] = most_frequent
+        
+        return smoothed
     
     def diarize(self, audio_path):
         """
