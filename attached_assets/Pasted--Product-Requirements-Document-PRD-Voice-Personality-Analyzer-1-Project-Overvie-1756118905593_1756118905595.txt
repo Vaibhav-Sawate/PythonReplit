@@ -1,0 +1,269 @@
+# Product Requirements Document (PRD)
+## Voice Personality Analyzer
+
+***
+
+## 1. Project Overview
+
+### 1.1 Product Vision
+A simple web application that analyzes audio input (recorded or uploaded) to determine and classify the speaker's personality traits using AI-powered voice analysis.
+
+### 1.2 Product Goals
+- Provide instant personality insights from voice samples
+- Offer an intuitive, single-page user interface
+- Demonstrate AI capabilities in voice analysis
+- Serve as a portfolio project showcasing ML/AI skills
+
+### 1.3 Success Metrics
+- Successful audio processing rate: >95%
+- Average response time: <10 seconds
+- User engagement: Ability to analyze multiple audio samples per session
+
+***
+
+## 2. Target Audience
+
+### 2.1 Primary Users
+- **Recruiters and HR professionals** - Quick personality screening
+- **Content creators** - Voice analysis for character development
+- **General users** - Entertainment and self-discovery
+
+### 2.2 User Personas
+- **Technical enthusiast**: Interested in AI capabilities
+- **Professional user**: Quick personality assessment tool
+- **Casual user**: Entertainment and curiosity-driven usage
+
+***
+
+## 3. Functional Requirements
+
+### 3.1 Core Features
+
+#### 3.1.1 Audio Input Module
+**Feature**: Dual audio input methods
+- **Voice Recorder**: Built-in browser-based recording functionality
+  - Start/Stop recording buttons
+  - Real-time recording indicator
+  - Maximum recording duration: 60 seconds
+  - Supported format: WAV/MP3
+- **File Upload**: Audio file upload capability
+  - Supported formats: MP3, WAV, M4A
+  - Maximum file size: 10MB
+  - Drag-and-drop interface
+
+#### 3.1.2 Audio Processing Engine
+**Feature**: Server-side audio analysis
+- Audio format standardization (convert to WAV, 16kHz)
+- Audio quality validation
+- Voice activity detection
+- Feature extraction (pitch, tone, pace, volume variations)
+
+#### 3.1.3 Personality Analysis Module
+**Feature**: AI-powered personality classification
+- **Big Five Personality Traits Analysis**:
+  - Openness to Experience
+  - Conscientiousness
+  - Extraversion
+  - Agreeableness
+  - Neuroticism
+- **Additional Traits**:
+  - Confidence level
+  - Energy level
+  - Speaking pace analysis
+  - Emotional tone
+
+#### 3.1.4 Results Display Module
+**Feature**: Comprehensive personality report
+- **Visual Components**:
+  - Personality trait radar chart
+  - Percentage scores for each trait
+  - Confidence indicators
+- **Text Summary**:
+  - 2-3 sentence personality description
+  - Key personality highlights
+  - Dominant traits identification
+
+### 3.2 User Interface Requirements
+
+#### 3.2.1 Single Page Layout
+```
+┌─────────────────────────────────────┐
+│           Header & Title            │
+├─────────────────────────────────────┤
+│    Audio Input Section              │
+│  ┌─────────────┬─────────────────┐  │
+│  │   Record    │   Upload File   │  │
+│  │   Audio     │      OR         │  │
+│  └─────────────┴─────────────────┘  │
+├─────────────────────────────────────┤
+│      Processing Status              │
+├─────────────────────────────────────┤
+│     Results Display Area            │
+│  ├─ Personality Traits Chart        │
+│  ├─ Trait Scores                    │
+│  └─ Summary Description             │
+└─────────────────────────────────────┘
+```
+
+#### 3.2.2 UI Components
+- Clean, minimal design with intuitive navigation
+- Responsive design for desktop and mobile
+- Loading indicators during processing
+- Error handling with user-friendly messages
+
+***
+
+## 4. Technical Requirements
+
+### 4.1 Technology Stack
+- **Frontend**: Streamlit
+- **Backend**: Python 3.8+
+- **Audio Processing**: librosa, pydub
+- **ML/AI**: scikit-learn, transformers (for voice analysis)
+- **Deployment**: Streamlit Cloud or local hosting
+
+### 4.2 System Architecture
+```
+User Interface (Streamlit)
+    ↓
+Audio Input Handler
+    ↓
+Audio Preprocessing Pipeline
+    ↓
+Feature Extraction Engine
+    ↓
+Personality Classification Model
+    ↓
+Results Formatter
+    ↓
+Display Module
+```
+
+### 4.3 Technical Specifications
+
+#### 4.3.1 Audio Processing
+- **Input formats**: MP3, WAV, M4A
+- **Processing format**: WAV, 16kHz, mono
+- **Maximum duration**: 60 seconds
+- **Minimum duration**: 3 seconds
+
+#### 4.3.2 Feature Extraction
+- **Acoustic features**: 
+  - MFCC (Mel-frequency cepstral coefficients)
+  - Pitch variations and range
+  - Speaking rate (words per minute estimation)
+  - Energy and volume patterns
+  - Spectral features
+
+#### 4.3.3 Personality Model
+- **Classification approach**: Multi-label classification
+- **Model type**: Pre-trained transformer or ensemble model
+- **Output format**: Probability scores for each personality trait
+- **Confidence threshold**: Minimum 60% confidence for trait identification
+
+***
+
+## 5. Non-Functional Requirements
+
+### 5.1 Performance
+- **Response time**: <10 seconds for analysis
+- **Concurrent users**: Support 10+ simultaneous users
+- **Availability**: 95% uptime during demo periods
+
+### 5.2 Security & Privacy
+- **Audio data**: Not stored permanently on server
+- **Privacy**: No personal data collection
+- **Security**: Input validation for uploaded files
+
+### 5.3 Usability
+- **Accessibility**: Basic screen reader support
+- **Browser compatibility**: Chrome, Firefox, Safari, Edge
+- **Mobile responsive**: Functional on mobile devices
+
+***
+
+## 6. Implementation Plan
+
+### 6.1 Phase 1: Core Development (3-4 weeks)
+**Week 1-2: Backend Development**
+- Set up Python environment and dependencies
+- Implement audio upload and recording functionality
+- Develop audio preprocessing pipeline
+- Create feature extraction module
+
+**Week 3-4: AI Integration & Frontend**
+- Integrate personality analysis model
+- Build Streamlit interface
+- Implement results display components
+- Basic testing and debugging
+
+### 6.2 Phase 2: Enhancement & Testing (1-2 weeks)
+**Week 5-6: Polish & Deploy**
+- UI/UX improvements
+- Error handling and edge cases
+- Performance optimization
+- Documentation and deployment
+
+### 6.3 Development Milestones
+- [ ] Audio input functionality working
+- [ ] Audio preprocessing pipeline complete
+- [ ] Feature extraction implementation
+- [ ] Personality model integration
+- [ ] Streamlit UI complete
+- [ ] End-to-end testing passed
+- [ ] Deployment ready
+
+***
+
+## 7. Risk Assessment
+
+### 7.1 Technical Risks
+- **Audio quality variations**: Implement robust preprocessing
+- **Model accuracy**: Use validated personality assessment approaches
+- **Performance with large files**: Implement file size restrictions
+
+### 7.2 Mitigation Strategies
+- Extensive testing with diverse audio samples
+- Fallback mechanisms for processing failures
+- Clear user guidelines for optimal audio quality
+
+***
+
+## 8. Future Enhancements
+
+### 8.1 Advanced Features
+- Multiple speaker detection and analysis
+- Emotional state analysis alongside personality
+- Historical analysis tracking
+- Export functionality for results
+
+### 8.2 Technical Improvements
+- Real-time processing optimization
+- Advanced ML models integration
+- API development for third-party integration
+
+***
+
+## 9. Acceptance Criteria
+
+### 9.1 Minimum Viable Product (MVP)
+- [ ] Users can record audio through the web interface
+- [ ] Users can upload audio files
+- [ ] System processes audio and extracts personality traits
+- [ ] Results display personality analysis in text and visual format
+- [ ] Application runs smoothly on Streamlit
+- [ ] Processing completes within 10 seconds for 30-second audio clips
+
+### 9.2 Definition of Done
+- [ ] All core features implemented and tested
+- [ ] UI is responsive and user-friendly
+- [ ] Error handling covers major edge cases
+- [ ] Documentation is complete
+- [ ] Application is deployment-ready
+
+***
+
+**Document Version**: 1.0  
+**Last Updated**: August 25, 2025  
+**Author**: Development Team  
+**Project Duration**: 4-6 weeks
