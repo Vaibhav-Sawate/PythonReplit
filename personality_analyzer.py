@@ -54,7 +54,7 @@ class PersonalityAnalyzer:
             self.normalize_score(mfcc_variation, 0, 50) * 0.3
         )
         
-        return min(0.9, max(0.1, openness_score))
+        return float(min(0.9, max(0.1, openness_score)))
     
     def analyze_conscientiousness(self, features):
         """Analyze conscientiousness based on voice features"""
@@ -72,7 +72,7 @@ class PersonalityAnalyzer:
             self.normalize_score(rate_score, 0, 1) * 0.2
         )
         
-        return min(0.9, max(0.1, conscientiousness_score))
+        return float(min(0.9, max(0.1, conscientiousness_score)))
     
     def analyze_extraversion(self, features):
         """Analyze extraversion based on voice features"""
@@ -92,7 +92,7 @@ class PersonalityAnalyzer:
             rate_score * 0.3
         )
         
-        return min(0.9, max(0.1, extraversion_score))
+        return float(min(0.9, max(0.1, extraversion_score)))
     
     def analyze_agreeableness(self, features):
         """Analyze agreeableness based on voice features"""
@@ -110,7 +110,7 @@ class PersonalityAnalyzer:
             formant_warmth * 0.2
         )
         
-        return min(0.9, max(0.1, agreeableness_score))
+        return float(min(0.9, max(0.1, agreeableness_score)))
     
     def analyze_neuroticism(self, features):
         """Analyze neuroticism based on voice features"""
@@ -127,7 +127,7 @@ class PersonalityAnalyzer:
             zcr_tension * 0.2
         )
         
-        return min(0.9, max(0.1, neuroticism_score))
+        return float(min(0.9, max(0.1, neuroticism_score)))
     
     def analyze_additional_traits(self, features):
         """Analyze additional personality traits"""
@@ -140,14 +140,14 @@ class PersonalityAnalyzer:
             self.normalize_score(energy_level, 0, 0.1) * 0.6 +
             self.normalize_score(consistency, 0, 1) * 0.4
         )
-        additional_traits['confidence'] = min(0.95, max(0.05, confidence))
+        additional_traits['confidence'] = float(min(0.95, max(0.05, confidence)))
         
         # Energy level (based on RMS and tempo)
         energy = (
             self.normalize_score(features.get('rms_mean', 0), 0, 0.1) * 0.7 +
             self.normalize_score(features.get('tempo', 120), 100, 140) * 0.3
         )
-        additional_traits['energy'] = min(0.95, max(0.05, energy))
+        additional_traits['energy'] = float(min(0.95, max(0.05, energy)))
         
         # Speaking pace classification
         speaking_rate = features.get('speaking_rate', 150)

@@ -201,7 +201,7 @@ def main():
                         col1, col2 = st.columns([3, 1])
                         with col1:
                             st.write(f"**{trait}**")
-                            st.progress(score)
+                            st.progress(float(score))
                         with col2:
                             st.metric("Score", f"{score:.1%}")
                     
