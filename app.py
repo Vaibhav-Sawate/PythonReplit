@@ -4,7 +4,7 @@ import os
 import io
 import time
 from audio_processor import AudioProcessor
-from personality_analyzer import PersonalityAnalyzer
+from ml_personality_analyzer import MLPersonalityAnalyzer
 from utils import validate_audio_file, format_duration
 import plotly.graph_objects as go
 import plotly.express as px
@@ -14,7 +14,7 @@ import pandas as pd
 @st.cache_resource
 def get_processors():
     audio_processor = AudioProcessor()
-    personality_analyzer = PersonalityAnalyzer()
+    personality_analyzer = MLPersonalityAnalyzer()
     return audio_processor, personality_analyzer
 
 def create_personality_chart(scores):
@@ -84,7 +84,7 @@ def main():
     
     # Header
     st.title("🎤 Voice Personality Analyzer")
-    st.markdown("Analyze personality traits from voice recordings using AI-powered voice analysis")
+    st.markdown("Advanced personality analysis from voice recordings using machine learning and psychological research")
     st.divider()
     
     # Get processors
