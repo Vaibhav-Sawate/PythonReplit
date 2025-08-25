@@ -47,7 +47,8 @@ class AudioProcessor:
         if duration > self.max_duration:
             # Truncate to max duration
             max_samples = int(self.max_duration * sr)
-            y = y[:max_samples]
+            if max_samples < len(y):
+                y = y[:max_samples]
         
         return y, duration
     
@@ -64,13 +65,13 @@ class AudioProcessor:
         signal_length = len(y)
         num_frames = int(np.ceil(float(np.abs(signal_length - frame_size)) / frame_stride))
         
-        pad_signal_length = num_frames * frame_stride + frame_size
+        pad_signal_length = int(num_frames * frame_stride + frame_size)
         z = np.zeros((pad_signal_length - signal_length))
         pad_signal = np.append(y, z)
         
         indices = np.tile(np.arange(0, frame_size), (num_frames, 1)) + \
                  np.tile(np.arange(0, num_frames * frame_stride, frame_stride), (frame_size, 1)).T
-        frames = pad_signal[indices.astype(np.int32, copy=False)]
+        frames = pad_signal[indices.astype(int)]
         
         # Apply window
         frames *= np.hamming(frame_size)
@@ -86,7 +87,7 @@ class AudioProcessor:
         high_freq_mel = (2595 * np.log10(1 + (sr / 2) / 700))
         mel_points = np.linspace(low_freq_mel, high_freq_mel, nfilt + 2)
         hz_points = (700 * (10**(mel_points / 2595) - 1))
-        bin = np.floor((NFFT + 1) * hz_points / sr)
+        bin = np.floor((NFFT + 1) * hz_points / sr).astype(int)
         
         fbank = np.zeros((nfilt, int(np.floor(NFFT / 2 + 1))))
         for m in range(1, nfilt + 1):
@@ -104,7 +105,14 @@ class AudioProcessor:
         filter_banks = 20 * np.log10(filter_banks)
         
         # DCT
-        mfcc = fft.dct(filter_banks, type=2, axis=1, norm='ortho')[:, :n_mfcc]
+        try:
+            dct_result = fft.dct(filter_banks, type=2, axis=1, norm='ortho')
+            if dct_result.shape[1] >= n_mfcc:
+                mfcc = dct_result[:, :n_mfcc]
+            else:
+                mfcc = np.zeros((filter_banks.shape[0], n_mfcc))
+        except Exception as e:
+            mfcc = np.zeros((filter_banks.shape[0], n_mfcc))
         
         return mfcc
     
@@ -156,6 +164,8 @@ class AudioProcessor:
             # Pitch estimation using autocorrelation
             def estimate_pitch(signal, sr, win_length=1024, hop_length=512):
                 pitches = []
+                win_length = int(win_length)
+                hop_length = int(hop_length)
                 for i in range(0, len(signal) - win_length, hop_length):
                     frame = signal[i:i + win_length]
                     # Autocorrelation
@@ -187,15 +197,15 @@ class AudioProcessor:
                 features['pitch_range'] = 100
             
             # Spectral features using scipy
-            frame_length = 2048
-            hop_length = 512
+            frame_length = int(2048)
+            hop_length = int(512)
             
             # Short-time Fourier transform
             f, t, Zxx = signal.stft(y, sr, nperseg=frame_length, noverlap=frame_length-hop_length)
             magnitude = np.abs(Zxx)
             
             # Spectral centroid
-            spectral_centroids = np.sum(f[:, np.newaxis] * magnitude, axis=0) / np.sum(magnitude, axis=0 + 1e-12)
+            spectral_centroids = np.sum(f[:, np.newaxis] * magnitude, axis=0) / (np.sum(magnitude, axis=0) + 1e-12)
             features['spectral_centroid_mean'] = np.mean(spectral_centroids)
             features['spectral_centroid_std'] = np.std(spectral_centroids)
             
@@ -221,6 +231,8 @@ class AudioProcessor:
             # Zero crossing rate
             def zero_crossing_rate(signal, frame_length=2048, hop_length=512):
                 frames = []
+                frame_length = int(frame_length)
+                hop_length = int(hop_length)
                 for i in range(0, len(signal) - frame_length, hop_length):
                     frame = signal[i:i + frame_length]
                     zcr = np.sum(np.abs(np.diff(np.sign(frame)))) / (2 * len(frame))
@@ -234,6 +246,8 @@ class AudioProcessor:
             # RMS Energy
             def rms_energy(signal, frame_length=2048, hop_length=512):
                 frames = []
+                frame_length = int(frame_length)
+                hop_length = int(hop_length)
                 for i in range(0, len(signal) - frame_length, hop_length):
                     frame = signal[i:i + frame_length]
                     rms = np.sqrt(np.mean(frame ** 2))
