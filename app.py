@@ -5,17 +5,20 @@ import io
 import time
 from audio_processor import AudioProcessor
 from ml_personality_analyzer import MLPersonalityAnalyzer
+from speaker_diarization import SpeakerDiarization
 from utils import validate_audio_file, format_duration
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
+import numpy as np
 
 # Initialize processors
 @st.cache_resource
 def get_processors():
     audio_processor = AudioProcessor()
     personality_analyzer = MLPersonalityAnalyzer()
-    return audio_processor, personality_analyzer
+    speaker_diarizer = SpeakerDiarization()
+    return audio_processor, personality_analyzer, speaker_diarizer
 
 def create_personality_chart(scores):
     """Create a radar chart for personality traits"""
@@ -83,12 +86,12 @@ def main():
     )
     
     # Header
-    st.title("🎤 Voice Personality Analyzer")
-    st.markdown("Advanced personality analysis from voice recordings using machine learning and psychological research")
+    st.title("🎤 Multi-Speaker Voice Personality Analyzer")
+    st.markdown("Advanced personality analysis with **automatic speaker identification** - analyzes each person separately in group conversations using machine learning and psychological research")
     st.divider()
     
     # Get processors
-    audio_processor, personality_analyzer = get_processors()
+    audio_processor, personality_analyzer, speaker_diarizer = get_processors()
     
     # Audio Input Section
     st.header("Audio Input")
@@ -97,7 +100,7 @@ def main():
     
     with col1:
         st.subheader("🎙️ Record Audio")
-        st.markdown("Record your voice directly in the browser")
+        st.markdown("Record voices directly in the browser (supports multiple speakers)")
         
         # Audio recorder
         audio_data = st.audio_input("Record your voice (max 60 seconds)")
@@ -108,7 +111,7 @@ def main():
     
     with col2:
         st.subheader("📁 Upload Audio File")
-        st.markdown("Upload an audio file (MP3, WAV, M4A - max 10MB)")
+        st.markdown("Upload audio files with conversations or multiple speakers (MP3, WAV, M4A - max 10MB)")
         
         uploaded_file = st.file_uploader(
             "Choose an audio file",
@@ -148,20 +151,51 @@ def main():
                             tmp_file.write(audio_source.getvalue())
                         tmp_file_path = tmp_file.name
                     
-                    # Process audio
+                    # Process audio with speaker diarization
                     progress_bar = st.progress(0)
                     status_text = st.empty()
                     
-                    status_text.text("Processing audio...")
-                    progress_bar.progress(25)
+                    status_text.text("Identifying speakers in audio...")
+                    progress_bar.progress(20)
                     
-                    features = audio_processor.extract_features(tmp_file_path)
+                    # Diarize speakers
+                    speaker_segments = speaker_diarizer.diarize(tmp_file_path)
                     
-                    status_text.text("Analyzing personality traits...")
-                    progress_bar.progress(75)
+                    status_text.text("Extracting features for each speaker...")
+                    progress_bar.progress(40)
                     
-                    # Analyze personality
-                    personality_scores, additional_traits, summary = personality_analyzer.analyze(features)
+                    # Process each speaker
+                    speaker_results = {}
+                    num_speakers = len(speaker_segments)
+                    
+                    for i, (speaker_id, speaker_audio) in enumerate(speaker_segments.items()):
+                        # Save speaker audio to temp file
+                        with tempfile.NamedTemporaryFile(delete=False, suffix=f'_speaker_{speaker_id}.wav') as speaker_tmp:
+                            # Convert numpy array back to audio file
+                            import scipy.io.wavfile as wavfile
+                            wavfile.write(speaker_tmp.name, 16000, (speaker_audio * 32767).astype(np.int16))
+                            speaker_tmp_path = speaker_tmp.name
+                        
+                        try:
+                            # Extract features for this speaker
+                            speaker_features = audio_processor.extract_features(speaker_tmp_path)
+                            
+                            # Analyze personality for this speaker
+                            personality_scores, additional_traits, summary = personality_analyzer.analyze(speaker_features)
+                            
+                            speaker_results[speaker_id] = {
+                                'personality_scores': personality_scores,
+                                'additional_traits': additional_traits,
+                                'summary': summary,
+                                'duration': len(speaker_audio) / 16000
+                            }
+                        finally:
+                            os.unlink(speaker_tmp_path)
+                        
+                        # Update progress
+                        progress = 40 + (50 * (i + 1) / num_speakers)
+                        progress_bar.progress(int(progress))
+                        status_text.text(f"Analyzing speaker {speaker_id + 1} of {num_speakers}...")
                     
                     progress_bar.progress(100)
                     status_text.text("Analysis complete!")
@@ -175,68 +209,100 @@ def main():
                     
                     # Results Display
                     st.divider()
-                    st.header("📊 Analysis Results")
+                    st.header("📊 Multi-Speaker Analysis Results")
                     
-                    # Summary
-                    st.subheader("Summary")
-                    st.info(summary)
+                    # Speaker summary
+                    if num_speakers > 1:
+                        st.success(f"🎙️ Detected {num_speakers} different speakers in the audio")
+                        
+                        # Show speaker durations
+                        col_speakers = st.columns(min(num_speakers, 4))
+                        for i, (speaker_id, result) in enumerate(speaker_results.items()):
+                            if i < len(col_speakers):
+                                with col_speakers[i]:
+                                    st.metric(
+                                        f"Speaker {speaker_id + 1}",
+                                        f"{result['duration']:.1f}s",
+                                        delta="speaking time"
+                                    )
+                        st.divider()
+                    else:
+                        st.info("📢 Single speaker detected in the audio")
                     
-                    # Big Five Traits
-                    st.subheader("Big Five Personality Traits")
-                    
-                    col1, col2 = st.columns([1, 1])
-                    
-                    with col1:
-                        fig_radar = create_personality_chart(personality_scores)
-                        st.plotly_chart(fig_radar, use_container_width=True)
-                    
-                    with col2:
-                        fig_bars = create_trait_bars(personality_scores)
-                        st.plotly_chart(fig_bars, use_container_width=True)
-                    
-                    # Detailed scores
-                    st.subheader("Detailed Trait Analysis")
-                    
-                    for trait, score in personality_scores.items():
-                        col1, col2 = st.columns([3, 1])
+                    # Display results for each speaker
+                    for speaker_id, result in speaker_results.items():
+                        speaker_num = speaker_id + 1
+                        
+                        # Speaker header
+                        if num_speakers > 1:
+                            st.subheader(f"🎭 Speaker {speaker_num} - Personality Analysis")
+                            st.caption(f"Speaking duration: {result['duration']:.1f} seconds")
+                        else:
+                            st.subheader("🎭 Personality Analysis")
+                        
+                        # Summary
+                        st.info(result['summary'])
+                        
+                        # Big Five Traits Charts
+                        col1, col2 = st.columns([1, 1])
+                        
                         with col1:
-                            st.write(f"**{trait}**")
-                            st.progress(float(score))
+                            fig_radar = create_personality_chart(result['personality_scores'])
+                            fig_radar.update_layout(title=f"Speaker {speaker_num} - Personality Traits")
+                            st.plotly_chart(fig_radar, use_container_width=True)
+                        
                         with col2:
-                            st.metric("Score", f"{score:.1%}")
-                    
-                    # Additional Traits
-                    st.subheader("Additional Analysis")
-                    
-                    col1, col2, col3, col4 = st.columns(4)
-                    
-                    with col1:
-                        st.metric(
-                            "Confidence Level",
-                            f"{additional_traits['confidence']:.1%}",
-                            delta=None
-                        )
-                    
-                    with col2:
-                        st.metric(
-                            "Energy Level",
-                            f"{additional_traits['energy']:.1%}",
-                            delta=None
-                        )
-                    
-                    with col3:
-                        st.metric(
-                            "Speaking Pace",
-                            additional_traits['speaking_pace'],
-                            delta=None
-                        )
-                    
-                    with col4:
-                        st.metric(
-                            "Emotional Tone",
-                            additional_traits['emotional_tone'],
-                            delta=None
-                        )
+                            fig_bars = create_trait_bars(result['personality_scores'])
+                            fig_bars.update_layout(title=f"Speaker {speaker_num} - Trait Scores")
+                            st.plotly_chart(fig_bars, use_container_width=True)
+                        
+                        # Detailed scores
+                        st.write("**Detailed Trait Analysis:**")
+                        
+                        for trait, score in result['personality_scores'].items():
+                            col1, col2 = st.columns([3, 1])
+                            with col1:
+                                st.write(f"**{trait}**")
+                                st.progress(float(score))
+                            with col2:
+                                st.metric("Score", f"{score:.1%}")
+                        
+                        # Additional Traits
+                        st.write("**Additional Analysis:**")
+                        
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.metric(
+                                "Confidence Level",
+                                f"{result['additional_traits']['confidence']:.1%}",
+                                delta=None
+                            )
+                        
+                        with col2:
+                            st.metric(
+                                "Energy Level",
+                                f"{result['additional_traits']['energy']:.1%}",
+                                delta=None
+                            )
+                        
+                        with col3:
+                            st.metric(
+                                "Speaking Pace",
+                                result['additional_traits']['speaking_pace'],
+                                delta=None
+                            )
+                        
+                        with col4:
+                            st.metric(
+                                "Emotional Tone",
+                                result['additional_traits']['emotional_tone'],
+                                delta=None
+                            )
+                        
+                        # Add separator between speakers
+                        if num_speakers > 1 and speaker_id != max(speaker_results.keys()):
+                            st.divider()
                     
                 except Exception as e:
                     st.error(f"Error processing audio: {str(e)}")
